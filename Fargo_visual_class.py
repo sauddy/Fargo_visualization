@@ -9,7 +9,7 @@
 # Date : 9 September 2019
 # modified : 20 November 2019 to modify the polar plots with cartesian coordinates
 # moddified: 26 December for generating the training set data
-
+# modified :  20 March 2020 
 
 ####### Importing the required modules
 
@@ -21,13 +21,6 @@ plt.rcParams['ytick.direction'] = 'in'
 plt.rc('text', usetex=True)
 import os
 
-## optional import for multiprocessing (under developement)
-# import time
-# import glob
-# from matplotlib import ticker, cm
-# import multiprocessing as mp
-# import concurrent.futures
-# import cv2
 
 
 
@@ -110,6 +103,10 @@ class fargo_visualization(object):
     """
     ## Global definitation
     Earth_mass  = 3e-6
+
+    current_directory = os.getcwd() 
+    resultfolder = current_directory + '/analysis_output/'
+    
     
     def __init__(self,output_folder):
         Mesh.__init__(self, output_folder)       #All the Mesh attributes inside Field (## Setting up the coordinates )
@@ -118,11 +115,23 @@ class fargo_visualization(object):
         
         self.output_folder = output_folder
         self.number_of_outputs = int(self.ntot/self.ninterm) ## Total number of outputs
-        self.sample_number = int(output_folder.split('_')[-1]) ## this picks the file number
 
-        # self.number_of_orbit = int(self.ntot/20) ## Total number of orbits (ninterm=20 is 1 orbit)
-#         print(self.output_folder[-3:-1])
-        print (self.nx, self.ny, self.omegaframe,self.alpha, self.epsilon1, self.sigmaslope, self.sigma0,self.planetmass)
+        try: ## When folder contains subfolder with simulations (used for the case of Training set with 1000 simulations)
+            self.sample_number = int(output_folder.split('_')[-1]) ## this picks the file number for multiple output folder, TS_30_120
+        except ValueError: ## for path to single sumulation
+            self.sample_number = None  ## for a single simulation data folder
+
+
+        self.Planet_mass = int(self.planetmass/self.Earth_mass) ## Planet mass in units of earth mass
+        current_directory = os.getcwd() 
+        self.path= current_directory + '/Outputs' ## Creating the output foler to store results
+                 
+        try:      
+            os.makedirs(self.path)
+        except OSError:  
+            pass
+
+        print('Nx=', self.nx, 'Ny=', self.ny, 'alpha=', self.alpha, 'epsilon=', self.epsilon1, 'Planet Mass=', self.planetmass)
                 
 
     def _initialize(self,fluid,fluid_property,output=None):
@@ -149,10 +158,11 @@ class fargo_visualization(object):
             
         density = np.fromfile(filename).reshape(self.ny,self.nx) ## evolving density 
         mean_density=density.mean(axis=1)
+
         
         return(initial_density,mean_intial_density,density,mean_density)
         
-    def _density_plot(self,fluid,fluid_property,output= None,plot_type=None,fraction=None,ax=None):
+    def _density_plot(self,fluid,fluid_property,output= None,plot_type=None,fraction=None,gap_type=None,ax=None,output_path=None):
         
         '''
          Input: 1. fluid type(dust or gas) 
@@ -160,24 +170,13 @@ class fargo_visualization(object):
                 Optional input
                 3. Output at which orbit, by default it takes the last
                 4. plot type (1D, 2D or 2D polar), by default it takes 1D
-                5. fraction= to display the gapwidth if needed
-                
+                5. fraction= to display the gapwidth if needed # for dong this only helps to help to guide what contrast is a gap
+                6. Gap_type by default in Kanagaw, Mention "Dong" for Dong formulat
+                7. ax is needed for subplots
+                8. outpath is only needed for making a folder for movies
          Output: density plot 
         '''
         
-        ############## Creating output folders to save the output images##########
-        current_directory = os.getcwd() 
-        # print("the current directory in", current_directory)
-        path= current_directory + '/movie_outputs_'+ fluid +'_'+ fluid_property
-        path2 = current_directory + '/movie_folder'
-                
-        try:      
-            os.makedirs(path)
-        except OSError:  
-            pass
-#              print ("Creation of the directory %s failed/ not needed as it already exit" % path)
-        else:  
-            print ("Successfully created the directory %s" % path)
 
         #######################################################
                
@@ -187,17 +186,24 @@ class fargo_visualization(object):
         orbit = int(output*self.ninterm/20) #(ninterm=20 is 1 orbit)
         
         print("currently plotting output= ",output)
-        
+
+       
         ## Reading the intial value of the density and the evolving density
         initial_density,mean_intial_density,density,mean_density = self._initialize(fluid,fluid_property,output=output)
         
         
-        file_number = self.output_folder[-3:-1]
+        # file_number = self.output_folder[-3:-1]
 
         ## this is used for outputs from diffent models
 #         outputfilename_figfile = os.path.join(path, fluid +'_dens_' +'%s'%file_number+ ".jpg")
         ## this is used for outputs from differnt orbits but same model
-        outputfilename_figfile = os.path.join(path, fluid +'_dens_' +'%s'%output+ ".jpg")
+        outputfilename_figfile = os.path.join(self.path, fluid +'_dens_' +'%s'%output+ ".jpg")
+
+        if output_path != None:  ## for generating time lapse for movie a separate folder is made
+        	outputfilename_figfile = os.path.join(output_path, fluid +'_dens_' +'%s'%output+ ".jpg")
+
+        	
+        
         
         Planet_mass = int(self.planetmass/self.Earth_mass)
         
@@ -224,8 +230,7 @@ class fargo_visualization(object):
         #         plt.ylabel(r"Log $\Delta \Sigma/\Sigma_{0}$", fontsize=15)
             plt.xlabel(r"Radius", fontsize=15)
             plt.tight_layout()
-            plt.savefig(outputfilename_figfile,format='jpg',dpi=300)
-            plt.close()
+            
             
         if plot_type == "2D":
             fig = plt.figure(figsize=(5, 5))
@@ -235,9 +240,7 @@ class fargo_visualization(object):
             plt.xlabel(r"$\varphi$")
             plt.yscale("log")
             plt.colorbar()
-#             cbar.set_ylabel(r"Log $\Sigma$")
-            plt.savefig(outputfilename_figfile,format='jpg',dpi=300)
-            plt.close()
+#           
             
             
         if plot_type == "2D_polar":            
@@ -268,30 +271,40 @@ class fargo_visualization(object):
             ax.set_ylabel(ylabel,fontsize=16)
             
             ## additonal info if needed for plotting optional
-            Planet_mass = int(self.planetmass/self.Earth_mass)
-            gap_list_, number ,gap_depth  = self._get_the_disk_gap(fluid,fluid_property,fraction=fraction,output=output)
+            
+            gap_list_, number ,gap_depth  = self._get_the_disk_gap(fluid,fluid_property,fraction=fraction,gap_type=gap_type,output=output)
             # print(gap_list_)
-            ax.set_title(str(fluid[0:4]).upper() + " Gap-widths =%s"% np.round(gap_list_,3)+ " $M_{P}$= %s"%Planet_mass+ r" $M_{\rm E}$"+ " Orbit = %s"%orbit, fontsize=10,color='Black')
+            ax.set_title(str(fluid[0:4]).upper() + " Gap-widths =%s"% np.round(gap_list_,3)+ " $M_{P}$= %s"%self.Planet_mass+ r" $M_{\rm E}$"+ " Orbit = %s"%orbit, fontsize=10,color='Black')
             plt.tight_layout()
 
-            current_directory = os.getcwd() 
+        if self.sample_number == None: 
+            plt.savefig(outputfilename_figfile,format='jpg',dpi=300)     
+            plt.show() 
+        else: ## for multiple simulations
             if fluid == 'gas':
-                path = current_directory + '/analysis_output/' + 'Disk_gas_plots' # introduced for the traning sets
+                path = self.resultfolder + 'Disk_gas_plots' # introduced for the traning sets
             else:                
-                path = current_directory + '/analysis_output/' + 'Disk_dust_plots'
-            fig_D = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')
-            # ax.legend(loc=4, fontsize=6)
-            # plt.tight_layout()            
+                path = self.resultfolder + 'Disk_dust_plots'
+            fig_D = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')           
             plt.savefig(fig_D,format='jpg',dpi=300)
-            plt.close()
-            # plt.savefig(outputfilename_figfile,format='jpg',dpi=300)
-#             plt.close()
-
+            
+        plt.close()
         return fig
     
    
         
-    def _get_the_disk_gap(self,fluid,fluid_property,fraction=None,output= None,plot=None, ax=None):
+    def _get_the_disk_gap(self,fluid,fluid_property,fraction=None,output= None,plot=None, gap_type=None, ax=None):
+
+
+        '''
+        Input : 1. fluid type(dust or gas) 
+                2. field type(dens, vy, vx) 
+                Optional input
+                3. Output at which orbit, by default it takes the last
+                4. fraction= to display the gapwidth if needed # for dong this only helps to help to guide what contrast is a gap
+                5. Gap_type by default in Kanagaw, Mention "Dong" for Dong formulat
+                6. ax is needed for subplots 
+        '''
         
         initial_density, mean_intial_density, density, mean_density = self._initialize(fluid, fluid_property, output=output)
 
@@ -307,53 +320,19 @@ class fargo_visualization(object):
         index_above_radius1 = np.asarray(np.nonzero(self.yc >= 1))
         dens = mean_density 
         
-        ## Checking for multiplicity, if the density at any radius (here the position of the planet)
-        ## is greater than the comparison density then multiple gaps:
-#         radius_in_list =[]
-#         radius_out_list = []
 
-        
-#         ## if there multiple gaps gap the following is used     
-#         if dens[min(min(index_above_radius1))] >= fraction_with_respect_to_initial_density[min(min(index_above_radius1))]:  
-# #             print(dens[min(min(index_above_radius1))])
-#             radius_list = []# defining empty lists  
-#             for index in range(min(min(index_above_radius1)), 0, -1):
-#                 if dens[index] <= fraction_with_respect_to_initial_density[index]:                    
-#                     radius_list.append(self.yc[index])
-#             if len(radius_list) != 0: ## if there are no values below the given density fraction               
-#                 radius_in_list.append(min(radius_list)) 
-#                 radius_out_list.append(max(radius_list))
-#             radius_list = []                     
-#             for index in range(min(min(index_above_radius1)), len(self.yc)):                
-#                 if dens[index] <= fraction_with_respect_to_initial_density[index]:                    
-#                     radius_list.append(self.yc[index])
-#             if len(radius_list) != 0: ## if there are no values below the given density fraction               
-#                 radius_in_list.append(min(radius_list)) 
-#                 radius_out_list.append(max(radius_list))
-            
-        
-#         else: ## if there is only one gap the following is used     
-#             for index in range(min(min(index_above_radius1)), len(self.yc)): # index above r = 1 for density above cutoff
-#                 if dens[index] >= fraction_with_respect_to_initial_density[index]:  # for density greater than the given fraction the intial density                    
-#                     radius_out = self.yc[index]
-# #                     print("radius_out",radius_out)
-#                     break
-#             radius_out_list.append(radius_out)
-#             for index in range(min(min(index_above_radius1)), 0, -1):        # index below r = 1 for density above cutoff            
-#                 if dens[index] >= fraction_with_respect_to_initial_density[index]:  # for density greater than the given fraction the intial densit                   
-#                     radius_in = self.yc[index]
-# #                     print("radius_in",radius_in)
-#                     break       
-#             radius_in_list.append(radius_in) 
         radius_in_list =[] # radius inner wall of gap
         radius_out_list = [] # radius outer wall of gap
         gap_depth = [] # to store the values of gap depth
         gap_depth_fraction = [] # to store the depth fraction wrt to the initial density
         radius_at_gap_depth = [] # to store the values radius of gap depth
-        
-        '''Algorithm One
-           Used to calculate all the gap widths and depth
-        '''
+        density_at_geometric_mean = [] # to store the density at geometric mean. refer dong et al 2017 eq 9
+        index_at_gap_depth_list = [] # index at the gap depth
+        # 
+
+        '''Algorithm  three
+#            Used to calculate all the gap widths and depth using the Dong et al 2017 model
+#        '''
         
         index_start = 0 # Default starting index
         index_intersections = [] # empty list to store the radius index of gaps outer and inner edge
@@ -380,25 +359,72 @@ class fargo_visualization(object):
         ## Calculation the gap depth and the radius at gap depth
         for gap_numbers in range(0, len(index_intersections),2): ## identifing the radius index at gap edges
             den_list = [] # empty list o store the density values in the gap
-            local_depth = [] # empty list to store the local gap depth
             index_at_gap_depth = [] # empty list to store the index at the gap depth
+            local_intial_denstiy = []
             ## finding the density between the gaps and findng its min
             for index in range(index_intersections[gap_numbers], index_intersections[gap_numbers+1],1): 
                 den_list.append(dens[index]) ## all the density values in the gap
             gap_depth.append(min(den_list)) #  the gap depth minimum value
-            local_depth.append(min(den_list)) # storing the local value for comparison
+            local_depth = min(den_list) # storing the local value for comparison whereas gap_depth has all values
             index_at_gap_depth = np.asarray(np.nonzero(mean_density == local_depth)) # index at gap_depth
+            
+            index_at_gap_depth_list.append(index_at_gap_depth[0][0]) ## 0 0 are added to just get the value of the index (without brackets)
             radius_at_gap_depth.append(self.yc[min(min(index_at_gap_depth))]) # radius at depth
-            gap_depth_fraction.append(local_depth/mean_intial_density[min(min(index_at_gap_depth))])
+            gap_depth_fraction.append(local_depth/mean_intial_density[min(min(index_at_gap_depth))]) #sigma_min/Sigma_
+            
+            ## defining geometric mean from dong et al. 2017
+            
+            density_at_geometric_mean.append(np.sqrt(local_depth*mean_intial_density[min(min(index_at_gap_depth))]))
 
-        Planet_mass = int(self.planetmass/self.Earth_mass)        
-#         print(radius_in_list,radius_out_list)
-        gap_list = np.asarray(radius_out_list) - np.asarray(radius_in_list)
-        multiplicity = len(radius_in_list)
+        if gap_type == "Dong":   ## i.e., using dong method instead on Kanagawa, we append the radius in and radius out    
+            print("Using Dong Gap Formumla")                   
+            radius_in_list =[] ## radius inner wall of gap
+            radius_out_list = [] 
+            
+            index_start = 0
+            end = len(self.yc)
+            '''
+            The way this method works, we scan from the bottom of an identified gap i.e., index_at_gap_depth 
+            and identify the index at which the density crosses the geometric mean
+            For left cycle we append the radius in and for the right loop we append the radius out
+            '''
+            
+            for count in range(0,len(density_at_geometric_mean),1):
+            
+                for index in range(index_at_gap_depth_list[count],index_start,-1):
+                    if  dens[index] >= density_at_geometric_mean[count]:                    
+                        radius_in_list.append(self.yc[index]) # we identify the radius as radius_in
+                        # print('R_in',index)
+                        break 
+   
+                for index in range(index_at_gap_depth_list[count], end,1 ):
+                    if  dens[index] >= density_at_geometric_mean[count]:                    
+                        radius_out_list.append(self.yc[index]) # we identify the radius as radius_in
+                        # print('R_out',index)
+                        break
+        # for the dong method there are cases where there is no outer intersecion when when there is a gap
+        # particularly for very steep profiles. In such case we consider no gaps. 
+        # but no issue for Kanagawa methods
+               
+        # print(radius_in_list,radius_out_list)
+
+        if len(radius_in_list) == len(radius_out_list):
+            gap_list = np.asarray(radius_out_list) - np.asarray(radius_in_list)
+        else:
+            gap_list = []
+
+        # gap_list = np.asarray(radius_out_list) - np.asarray(radius_in_list)
+        multiplicity = len(gap_list) ## only if there is a gap 
+      
+        print(multiplicity)
         if multiplicity == 0: ## of there are no gaps
             gap_list =np.zeros(2) ## fill zero
             gap_depth = np.zeros(1)
-            # radius_at_gap_depth = np.zeros(1)
+           # radius_at_gap_depth = np.zeros(1)
+        
+        
+
+
         
         ## for plotting the density profile along with the gaps
         if plot!=None:
@@ -406,31 +432,67 @@ class fargo_visualization(object):
                 plt.figure(figsize=(5, 5))
                 ax = plt.gca()                
             fig = ax.plot(self.yc,mean_intial_density,label= "Initial %s"%fluid + " Density" + " res: %s"%self.ny +r"$\times$ %s"%self.nx )
-            ax.plot(self.yc,mean_density,linestyle='--',label=  r" $M_{P}$= %s"%Planet_mass+r" $M_{\rm {E}}$" + " Orbit = %s"%orbit)
+            ax.plot(self.yc,mean_density,linestyle='--',label=  r" $M_{P}$= %s"%self.Planet_mass+r" $M_{\rm {E}}$" + " Orbit = %s"%orbit)
             for x in radius_in_list+radius_out_list:
                 ax.axvline(x,linestyle='--',linewidth=0.5, color='k')
             if multiplicity >=1: 
                 ax.scatter(radius_at_gap_depth, gap_depth,marker='x')
+            if gap_type == "Dong":
+                for index,(x1, x2, width,den_GM) in enumerate(zip(radius_in_list, radius_out_list,gap_list,density_at_geometric_mean)):
+                    ax.hlines(den_GM, xmin=x1, xmax=x2, linestyle='--',linewidth=0.9, color='b')
 
             ax.plot(self.yc,fraction_with_respect_to_initial_density,linestyle='-.',linewidth=0.5,label= str(fraction*100)+r" percent of Initial %s"%fluid + " Density")
             ax.set_yscale('log')
             ax.set_ylabel(r" $\Sigma(r)$", fontsize=15)
             ax.set_xlabel(r"$R/R_{\rm 0}$", fontsize=15)
             ax.set_title(str(fluid[0:4]).upper() + " Gap-widths =%s"% np.round(gap_list,3)+r"$R_{\rm 0}$", fontsize=15,color='Black')
-            current_directory = os.getcwd() 
-            if fluid == 'gas':
-                path = current_directory + '/analysis_output/' + 'gas_gap' # introduced for the traning sets
-            else:                
-                path = current_directory + '/analysis_output/' + 'dust_gap'
-            fig1 = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')
             ax.legend(loc=4, fontsize=6)
-            plt.tight_layout()            
-            plt.savefig(fig1,format='jpg',dpi=300)
+            plt.tight_layout()   
+            outputfilename_diskgap = os.path.join(self.path, 'Gap_'+ fluid +'_dens_' +'%s'%output+ ".jpg")
+            if self.sample_number == None:                  
+                plt.savefig(outputfilename_diskgap,format='jpg',dpi=300) 
+                plt.show()  
+            else: ## for multiple simulations
+
+                if fluid == 'gas':
+                    path = self.resultfolder + 'gas_gap' # introduced for the traning sets
+                else:                
+                    path = self.resultfolder + 'dust_gap'
+                fig1 = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')         
+                plt.savefig(fig1,format='jpg',dpi=300)
+
             plt.close()
         return gap_list, multiplicity, gap_depth 
         
-    def _movie_density_plot(self,fluid,fluid_property,output=None,plot_type=None,frequency=None):
+    def do_parallel_plotting(self,numbers,figure_type=None,gap_type=None):
         
+        ############## Creating output folders to save the output images for time lapse##########
+
+        path1 = self.path + '/movie_outputs_'+ fluid +'_'+ fluid_property
+                
+        ######################################################
+
+
+        plot_fig = self._density_plot(fluid,fluid_property,plot_type=figure_type,gap_type=gap_type,output=numbers,output_path=path1)
+        
+    def _time_lapse(self,fluid,fluid_property,plot_type=None,output=None,frequency=None,gap_type=None,Parallel=None):
+        
+        
+        ############## Creating output folders to save the output images for time lapse##########
+
+        path1 = self.path + '/movie_outputs_'+ fluid +'_'+ fluid_property
+                
+        try:      
+            os.makedirs(path1)
+        except OSError:  
+            pass
+#              print ("Creation of the directory %s failed/ not needed as it already exit" % path)
+        else:  
+            print ("Successfully created the directory %s" % path1)
+
+        ######################################################
+        print(gap_type)
+        print(plot_type)
         if frequency == None:
             interval = 10 ## the default frequency
         else: 
@@ -438,31 +500,29 @@ class fargo_visualization(object):
         start = time.time()
         print("Plotting now...")
         
-        
-        for number in range(0,self.number_of_outputs+1,interval):
-            self._density_plot(fluid,fluid_property,output=number,plot_type=plot_type)
+        if Parallel == None:
+            run = "series"
+            for number in range(0,self.number_of_outputs+1,interval):
+                self._density_plot(fluid,fluid_property,output=number,plot_type=plot_type,gap_type=gap_type,output_path = path1)
+        else:
+            import multiprocessing as mp
+            import concurrent.futures
+            run ="Parallel"
+            with concurrent.futures.ProcessPoolExecutor() as executor:   
+                numbers = [number for number in range(0,self.number_of_outputs+1,interval)] 
+                gap_type = repeat(gap_type, len(numbers)) ## to get the gap_type keyword argument for same lenth as number
+                figure_type = repeat(plot_type,len(numbers)) ## to get the keyword argument of same length as numbers
+                results = executor.map(self.do_parallel_plotting,numbers,figure_type,gap_type) 
+                
         print("End of simulation")    
         end = time.time()
         T = end-start
-        print("Total time for parallel run %.2f"%T, 'sec') 
-        
-# #         start = time.perf_counter()    
-#         numbers = [number for number in range(0,self.number_of_outputs,interval)]      
-#         def do_something(number):
-#              return number +1            
-# #             self._density_plot(fluid,fluid_property,output=number,plot_type=plot_type)
-#             with concurrent.futures.ProcessPoolExecutor() as executor:                
-#                 results = executor.map(do_something, numbers)        
-# #             for result in results:
-# #                 print(result)
-#         finish =time.perf_counter()
-
-#         print(f'Finished in {round(finish-start,2)}seconds(s)')
+        print("Total time for",run,"run %.2f"%T, 'sec') 
         
 
-    def _time_evol_disk_gap(self,fluid,fluid_property,fraction=None,frequency=None,ax=None):
+    def _time_evol_disk_gap(self,fluid,fluid_property,fraction=None,frequency=None,gap_type=None,ax=None):
+       
         
-        Planet_mass = int(self.planetmass/self.Earth_mass)
         if frequency == None:
             interval = 10 ## the default frequency
         else: 
@@ -472,7 +532,7 @@ class fargo_visualization(object):
         orbit_number = []
 #         orbit = int(output*self.ninterm/20) #(ninterm=20 is 1 orbit)
         for number in range(0,self.number_of_outputs+1,interval):
-            gap, num,gap_depth  = self._get_the_disk_gap(fluid,fluid_property,fraction=fraction,output=number)
+            gap, num,gap_depth  = self._get_the_disk_gap(fluid,fluid_property,fraction=fraction,gap_type=gap_type,output=number)
             gap_list_1.append(gap[0])
             if num >1:
                 gap_list_2.append(gap[1])
@@ -481,19 +541,24 @@ class fargo_visualization(object):
             orbit_number.append(int(number*self.ninterm/20))
         if ax is None:
             ax = plt.gca()
-        fig=ax.plot(orbit_number,gap_list_1,label= r" $M_{P}$= %s"%Planet_mass+r" $M_{\rm {E}}$") 
+        fig=ax.plot(orbit_number,gap_list_1,label= r" $M_{P}$= %s"%self.Planet_mass+r" $M_{\rm {E}}$") 
         ax.plot(orbit_number,gap_list_2,label= "2nd Gap width "+str(fraction)+r"$\times$ Initial %s"%fluid +" Density") 
         ax.legend(loc=4)
         ax.set_ylabel(r"$\Delta_{gap}/R_{\rm P}$", fontsize=12)
         ax.set_xlabel(r"No of orbits", fontsize=12)
-        current_directory = os.getcwd() 
-        if fluid == 'gas':
-            path = current_directory + '/analysis_output/' + 'gas_gap_evol' # introduced for the traning sets
-        else:                
-            path = current_directory + '/analysis_output/' + 'dust_gap_evol'
-        figname = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')
         plt.tight_layout() 
-        plt.savefig(figname,format='jpg',dpi=300)
+        outputfilename_diskevol = os.path.join(self.path, 'Gap_'+ fluid +'_dens_' +'_evol_'+".jpg")
+        if self.sample_number == None:                  
+                plt.savefig(outputfilename_diskevol,format='jpg',dpi=300)  
+                plt.show() 
+        else:
+            if fluid == 'gas':
+                path =  self.resultfolder + 'gas_gap_evol' # introduced for the traning sets
+            else:                
+                path =  self.resultfolder + 'dust_gap_evol'
+            figname = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')
+            
+            plt.savefig(figname,format='jpg',dpi=300)
         plt.close()
         return fig
 
