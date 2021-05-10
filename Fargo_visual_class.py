@@ -10,6 +10,12 @@
 # modified : 20 November 2019 to modify the polar plots with cartesian coordinates
 # moddified: 26 December for generating the training set data
 # modified :  20 March 2020 
+# modifired : 12 June 2020, The bug for time lapse in class was fixed
+
+# modified : 21 September, To introduce the planet migration class 
+
+# on december 2020 we updated this version in syn with the version in FP folder
+# Updated on 14 April 2021 : to get output analysis for desired orbit in syn with the fargo file used in DPCNET
 
 ####### Importing the required modules
 
@@ -20,6 +26,7 @@ plt.rcParams['xtick.direction'] = 'in'
 plt.rcParams['ytick.direction'] = 'in'
 plt.rc('text', usetex=True)
 import os
+plt.switch_backend('agg')
 
 
 
@@ -105,17 +112,26 @@ class fargo_visualization(object):
     Earth_mass  = 3e-6
 
     current_directory = os.getcwd() 
-    resultfolder = current_directory + '/analysis_output/'
-    
-    
-    def __init__(self,output_folder):
+ #   resultfolder = current_directory + '/analysis_output/'
+#    resultfolder = current_directory + '/analysis_output_PM_10Jan_21/' 
+    resultfolder = current_directory + '/analysis_output_FP_22Jan-21/'
+ #   resultfolder = current_directory + '/analysis_output_FP_22Jan-21_DD/'
+    def __init__(self,output_folder,output_no=None):
         Mesh.__init__(self, output_folder)       #All the Mesh attributes inside Field (## Setting up the coordinates )
         Parameters.__init__(self, output_folder) #All the Parameters attributes inside Field    
         
         
         self.output_folder = output_folder
         self.number_of_outputs = int(self.ntot/self.ninterm) ## Total number of outputs
+        self.output_no = str(output_no)  ## to to get output analysis for desired orbit added on 14 April 21 after 23 sep 20
+        current_directory = os.getcwd()
+        if output_no != None:
+            self.resultfolder = current_directory + '/analysis_output_' + self.output_no +'/' ## amended on 23 September to get output analysis for desired orbit
+        else:
+            self.resultfolder = current_directory + '/analysis_output/'
+        print("hi",self.resultfolder) 
 
+           
         try: ## When folder contains subfolder with simulations (used for the case of Training set with 1000 simulations)
             self.sample_number = int(output_folder.split('_')[-1]) ## this picks the file number for multiple output folder, TS_30_120
         except ValueError: ## for path to single sumulation
@@ -198,7 +214,6 @@ class fargo_visualization(object):
 #         outputfilename_figfile = os.path.join(path, fluid +'_dens_' +'%s'%file_number+ ".jpg")
         ## this is used for outputs from differnt orbits but same model
         outputfilename_figfile = os.path.join(self.path, fluid +'_dens_' +'%s'%output+ ".jpg")
-
         if output_path != None:  ## for generating time lapse for movie a separate folder is made
         	outputfilename_figfile = os.path.join(output_path, fluid +'_dens_' +'%s'%output+ ".jpg")
 
@@ -263,7 +278,7 @@ class fargo_visualization(object):
 #             ax = plt.subplot(111)
 #             cax = ax.contourf(x, y, data,100,rstride=1, cstride=1, norm=norm, alpha=1, cmap=plt.cm.Spectral)
             fig = ax.contourf(x, y, data,100, norm=norm, alpha=1, cmap='YlOrBr')  
-            cbar = plt.colorbar(fig,orientation = "vertical", fraction=0.046, pad=0.04,ax=ax)
+            # cbar = plt.colorbar(fig,orientation = "vertical", fraction=0.046, pad=0.04,ax=ax)
             ax.axis('equal')
             ax.axis('square')
             
@@ -279,7 +294,7 @@ class fargo_visualization(object):
 
         if self.sample_number == None: 
             plt.savefig(outputfilename_figfile,format='jpg',dpi=300)     
-            plt.show() 
+            # plt.show() 
         else: ## for multiple simulations
             if fluid == 'gas':
                 path = self.resultfolder + 'Disk_gas_plots' # introduced for the traning sets
@@ -464,107 +479,166 @@ class fargo_visualization(object):
             plt.close()
         return gap_list, multiplicity, gap_depth 
         
-    def do_parallel_plotting(self,numbers,figure_type=None,gap_type=None):
+    def do_parallel_plotting(self,numbers,gap_type,figure_type,fluid,fluid_property):
         
+        # print(gap_type)
         ############## Creating output folders to save the output images for time lapse##########
-
-        path1 = self.path + '/movie_outputs_'+ fluid +'_'+ fluid_property
-                
+        movie_num = self.output_folder.split('_')[-1].split('/')[0] ## added to have seperate movie output folders
+#        path1 = self.path + '/movie_outputs_'+ fluid +'_'+ fluid_property
+        path1 = self.path + '/movie_outputs_' + fluid + '_' + fluid_property +str(movie_num)        
         ######################################################
-
-
         plot_fig = self._density_plot(fluid,fluid_property,plot_type=figure_type,gap_type=gap_type,output=numbers,output_path=path1)
         
-    def _time_lapse(self,fluid,fluid_property,plot_type=None,output=None,frequency=None,gap_type=None,Parallel=None):
-        
-        
-        ############## Creating output folders to save the output images for time lapse##########
+    def _time_lapse(self, fluid, fluid_property, plot_type=None, output=None, frequency=None, gap_type=None, Parallel=None):
 
-        path1 = self.path + '/movie_outputs_'+ fluid +'_'+ fluid_property
-                
-        try:      
+        ############## Creating output folders to save the output images for time lapse##########
+       # print(self.output_folder.split('_')[-1].split('/')[0]) ## added for time_lapse of multiple training sets on 11 Jan
+       # path1 = self.path + '/movie_outputs_' + fluid + '_' + fluid_property + self.output_folder.split('_')[-1].split('/')[0]
+        movie_num = self.output_folder.split('_')[-1].split('/')[0]   ## added for time_lapse of multiple training sets on 11 Jan
+        print("movie num=",movie_num)	
+        path1 = self.path + '/movie_outputs_' + fluid + '_' + fluid_property +str(movie_num)
+        try:
             os.makedirs(path1)
-        except OSError:  
+        except OSError:
             pass
 #              print ("Creation of the directory %s failed/ not needed as it already exit" % path)
-        else:  
-            print ("Successfully created the directory %s" % path1)
-
+        else:
+            print("Successfully created the directory %s" % path1)
+        print(Parallel)
         ######################################################
-        print(gap_type)
-        print(plot_type)
+        # print(gap_type)
+        print("plot_type =",plot_type)
         if frequency == None:
-            interval = 10 ## the default frequency
-        else: 
+            interval = 10  # the default frequency
+        else:
             interval = frequency
         start = time.time()
         print("Plotting now...")
-        
+
         if Parallel == None:
             run = "series"
-            for number in range(0,self.number_of_outputs+1,interval):
-                self._density_plot(fluid,fluid_property,output=number,plot_type=plot_type,gap_type=gap_type,output_path = path1)
+            for number in range(0, self.number_of_outputs + 1, interval):
+                self._density_plot(fluid, fluid_property, output=number, plot_type=plot_type, gap_type=gap_type, output_path=path1)
         else:
             import multiprocessing as mp
             import concurrent.futures
-            run ="Parallel"
-            with concurrent.futures.ProcessPoolExecutor() as executor:   
-                numbers = [number for number in range(0,self.number_of_outputs+1,interval)] 
-                gap_type = repeat(gap_type, len(numbers)) ## to get the gap_type keyword argument for same lenth as number
-                figure_type = repeat(plot_type,len(numbers)) ## to get the keyword argument of same length as numbers
-                results = executor.map(self.do_parallel_plotting,numbers,figure_type,gap_type) 
-                
-        print("End of simulation")    
-        end = time.time()
-        T = end-start
-        print("Total time for",run,"run %.2f"%T, 'sec') 
-        
+            run = "Parallel"
+            numbers = [number for number in range(0, self.number_of_outputs + 1, interval)]
+            gap_type = repeat(gap_type, len(numbers))  # to get the gaptype keyword argument for same lenth as number
+            figure_type = repeat(plot_type, len(numbers))  # to get the keyword argument of same length as numbers
+            fluid = repeat(fluid, len(numbers))
+            fluid_property = repeat(fluid_property, len(numbers))
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                executor.map(self.do_parallel_plotting, numbers, gap_type, figure_type, fluid, fluid_property)
 
-    def _time_evol_disk_gap(self,fluid,fluid_property,fraction=None,frequency=None,gap_type=None,ax=None):
-       
-        
+        print("End of simulation")
+        end = time.time()
+        T = end - start
+        print("Total time for", run, "run %.2f" % T, 'sec')
+
+    def _time_evol_disk_gap(self, fluid, fluid_property, fraction=None, frequency=None, gap_type=None, ax=None):
+
         if frequency == None:
-            interval = 10 ## the default frequency
-        else: 
+            print("test")
+            interval = 10  # the default frequency
+        else:
             interval = frequency
         gap_list_1 = []
         gap_list_2 = []
         orbit_number = []
 #         orbit = int(output*self.ninterm/20) #(ninterm=20 is 1 orbit)
-        for number in range(0,self.number_of_outputs+1,interval):
-            gap, num,gap_depth  = self._get_the_disk_gap(fluid,fluid_property,fraction=fraction,gap_type=gap_type,output=number)
+        for number in range(0, self.number_of_outputs + 1, interval):
+            gap, num, gap_depth = self._get_the_disk_gap(fluid, fluid_property, fraction=fraction, gap_type=gap_type, output=number)
             gap_list_1.append(gap[0])
-            if num >1:
+            if num > 1:
                 gap_list_2.append(gap[1])
             else:
                 gap_list_2.append(0)
-            orbit_number.append(int(number*self.ninterm/20))
+            orbit_number.append(int(number * self.ninterm / 20))
         if ax is None:
             ax = plt.gca()
-        fig=ax.plot(orbit_number,gap_list_1,label= r" $M_{P}$= %s"%self.Planet_mass+r" $M_{\rm {E}}$") 
-        ax.plot(orbit_number,gap_list_2,label= "2nd Gap width "+str(fraction)+r"$\times$ Initial %s"%fluid +" Density") 
+        fig = ax.plot(orbit_number, gap_list_1, label=r" $M_{P}$= %s" % self.Planet_mass + r" $M_{\rm {E}}$")
+        ax.plot(orbit_number, gap_list_2, label="2nd Gap width " + str(fraction) + r"$\times$ Initial %s" % fluid + " Density")
         ax.legend(loc=4)
         ax.set_ylabel(r"$\Delta_{gap}/R_{\rm P}$", fontsize=12)
         ax.set_xlabel(r"No of orbits", fontsize=12)
-        plt.tight_layout() 
-        outputfilename_diskevol = os.path.join(self.path, 'Gap_'+ fluid +'_dens_' +'_evol_'+".jpg")
-        if self.sample_number == None:                  
-                plt.savefig(outputfilename_diskevol,format='jpg',dpi=300)  
-                plt.show() 
+        plt.tight_layout()
+        outputfilename_diskevol = os.path.join(self.path, 'Gap_' + fluid + '_dens_' + '_evol_' + ".jpg")
+        if self.sample_number == None:
+            plt.savefig(outputfilename_diskevol, format='jpg', dpi=300)
+            plt.show()
         else:
             if fluid == 'gas':
-                path =  self.resultfolder + 'gas_gap_evol' # introduced for the traning sets
-            else:                
-                path =  self.resultfolder + 'dust_gap_evol'
+                path = self.resultfolder + 'gas_gap_evol'  # introduced for the traning sets
+            else:
+                path = self.resultfolder + 'dust_gap_evol'
             figname = os.path.join(path, fluid + '_gap_' + '%s' % self.sample_number + '.jpg')
-            
-            plt.savefig(figname,format='jpg',dpi=300)
+
+            plt.savefig(figname, format='jpg', dpi=300)
         plt.close()
         return fig
 
+    def _make_movie(self, fluid, fluid_property, plot_type=None, frequency=None, gap_type=None, Parallel=True):
 
+        self._time_lapse(fluid, fluid_property, plot_type=plot_type, frequency=frequency, gap_type="gap_type", Parallel=Parallel)
 
+        import cv2
+        print("Making the Video")
 
+        path1 = self.path + '/movie_outputs_' + fluid + '_' + fluid_property
+        image_folder = path1
+        if plot_type == "2D_polar":
+            video_name = fluid + '_' + fluid_property + '_2D' + '.mov'
+        else:
+            video_name = fluid + '_' + fluid_property + '.mov'
+        # print(image_folder)
+        if os.path.isfile(video_name):
+            print("Removing the old video and making the new one")
+            os.remove(video_name)
+        image = [img for img in os.listdir(image_folder) if img.endswith(".jpg")]
 
+        # sorting the images in ascending order of time
+        images = sorted(image, key=lambda x: int(x.replace(fluid + "_dens_", '').replace('.jpg', '')))
+        #print(images)
+        # images= sorted(image, key=lambda x: int(x.replace("dust1_dens_", '').replace('.jpg', '')))
+        print(video_name)
+        frame = cv2.imread(os.path.join(image_folder, images[0]))
+        height, width, layers = frame.shape
+       # fourcc = cv2.VideoWriter_fourcc(*'mp4v')  ## added 21 dec 2020 whem implementing on M1
+       # video=cv2.VideoWriter(video_name, fourcc, 10,(width,height))
+        video = cv2.VideoWriter(video_name, -1, 1, (width,height))
+        #video = cv2.VideoWriter('video.avi', -1, 10, (width, height))
+
+        for image in images:
+            video.write(cv2.imread(os.path.join(image_folder, image)))
+
+        cv2.destroyAllWindows()
+        video.release()
+
+        print("The video is done")
+
+        fileList = os.listdir(path1)
+
+        # This is delete all the images to save space
+        for fileName in fileList:
+            #           print(fileName)
+            os.remove(path1 + "/" + fileName)
+    def _planet_migration(self):
+
+        planet_file = self.output_folder + '/' + 'orbit' + str(0) + ".dat"
+
+        # print(planet_file)
+        fp = open(planet_file, 'r')
+        time = []
+        semimajor_axis = []
+        for line in fp:
+            t = line.strip().split()
+            time.append(np.float(t[0]))
+            semimajor_axis.append(round(np.float(t[2]), 2))
+
+        fp.close()
+        plt.plot(time, semimajor_axis)
+        plt.show()
+        return time, semimajor_axis
 
 
